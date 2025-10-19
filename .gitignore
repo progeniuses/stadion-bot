@@ -1,0 +1,20 @@
+# Python fayllar
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual muhit
+venv/
+env/
+
+# Maxfiy fayllar
+.env
+
+# IDE fayllari
+.idea/
+.vscode/
+
+# OS fayllari
+.DS_Store
+Thumbs.db
