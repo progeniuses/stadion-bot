@@ -16,7 +16,7 @@ from handlers.admin import admin_handlers
 from scheduler import start_reminder_scheduler
 
 # Initialize bot
-logging.info("🤖 Bot ishga tushmoqda...")
+logging.info("🤖 Bot ishga tushmoqda....")
 
 if not BOT_TOKEN or BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
     logging.error("❌ BOT_TOKEN o'rnatilmagan!")
