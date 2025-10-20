@@ -10,18 +10,19 @@ import datetime
 import os
 import logging
 
-
+logging.basicConfig(level=logging.INFO)
 
 EXCEL_FILE = "bookings.xlsx"  # XLSX ga o'zgartirdim (CSV emas)
 
-# Shablon kengliklari (siz bergan excel bo'yicha: №-5-10, FISH-20-30, Sana-10-15, Vaqt-15, Maydon-15, Pul-15 – faraz, aniq o'lchamlar bo'yicha moslang)
+# Shablon kengliklari (yangi Telefon ustuni qo'shildi)
 COLUMN_WIDTHS = {
     'A': 5,   # №
     'B': 25,  # FISH
     'C': 12,  # Sana
     'D': 15,  # Vaqt
     'E': 15,  # Maydon
-    'F': 15   # Pul
+    'F': 15,  # Pul
+    'G': 15   # Telefon
 }
 
 def load_or_create_excel():
@@ -30,10 +31,10 @@ def load_or_create_excel():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Sheet1'
-        # Header qo'shish (siz bergan shablon bo'yicha)
+        # Header qo'shish (yangi Telefon ustuni bilan)
         ws['A1'] = 'Butun tarix'
-        ws.merge_cells('A1:F1')  # Butun tarix ni birlashtirish (agar kerak bo'lsa)
-        ws.append(['№', 'FISH', 'Sana', 'Vaqt', 'Maydon', 'Pul'])
+        ws.merge_cells('A1:G1')  # Yangilandi: F dan G gacha
+        ws.append(['№', 'FISH', 'Sana', 'Vaqt', 'Maydon', 'Pul', 'Telefon'])
         apply_styles(ws)
         wb.save(EXCEL_FILE)
     else:
@@ -45,7 +46,7 @@ def apply_styles(ws):
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'),
                          top=Side(style='thin'), bottom=Side(style='thin'))
 
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=6):
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=7):  # Yangilandi: max_col 6 dan 7 ga
         for cell in row:
             cell.border = thin_border
             cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -56,7 +57,7 @@ def apply_styles(ws):
     for col, width in COLUMN_WIDTHS.items():
         ws.column_dimensions[col].width = width
 
-    # Qator balandligi (default 15, lekin shablon bo'yicha bir xil – agar o'zgartirish kerak bo'lsa, qo'shing)
+    # Qator balandligi
     for row in range(1, ws.max_row + 1):
         ws.row_dimensions[row].height = 15  # Standard Excel height
 
@@ -64,7 +65,7 @@ def sort_by_date(ws):
     """Sana bo'yicha tartiblash (3-qatordan boshlab)"""
     # Ma'lumotlarni list ga olish
     data = []
-    for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=6, values_only=True):
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=7, values_only=True):  # Yangilandi: max_col 6 dan 7 ga
         data.append(list(row))
 
     # Sana (C ustuni, index 2) bo'yicha tartiblash ('dd.mm.yyyy' stringdan datetime ga)
@@ -77,7 +78,7 @@ def sort_by_date(ws):
     data.sort(key=date_key)
 
     # Eski qatorlarni o'chirish
-    ws.delete_rows(3, ws.max_row - 2 if ws.max_row > 2 else 0)  # <<<< TO'G'RILASH: Agar data yo'q bo'lsa, xato oldini olish
+    ws.delete_rows(3, ws.max_row - 2 if ws.max_row > 2 else 0)
 
     # Yangi qatorlarni qo'shish va № ni yangilash
     for idx, row_data in enumerate(data, start=1):
@@ -104,28 +105,30 @@ def append_booking_to_excel(booking_id):
 
     # Sana ni string formatda yozish
     date_formatted = booking.date.strftime('%d.%m.%Y')
-    full_name = f"{user.name} {user.surname}"  # Agar teskari bo'lsa, {user.surname} {user.name} ga o'zgartiring
+    full_name = f"{user.name} {user.surname}"
 
-    # Qo'shish oldin, agar allaqachon mavjud bo'lsa, qo'shmaslik (duplicate oldini olish) <<<< TO'G'RILASH
+    # Qo'shish oldin, agar allaqachon mavjud bo'lsa, qo'shmaslik
     exists = False
     for row in range(3, ws.max_row + 1):
         if (ws.cell(row, 3).value == date_formatted and
             ws.cell(row, 4).value == booking.slot and
             ws.cell(row, 5).value == booking.field and
-            ws.cell(row, 2).value == full_name):
+            ws.cell(row, 2).value == full_name and
+            ws.cell(row, 7).value == user.phone):  # Telefonni ham tekshirish
             exists = True
             logging.warning(f"Duplicate booking ID {booking_id} allaqachon Excel da mavjud! Qo'shilmadi.")
             break
 
     if not exists:
-        # Yangi qator qo'shish (vaqtinchalik № = 0) <<<< TO'G'RILASH: Eski max_row dan foydalanmaslik
+        # Yangi qator qo'shish (Telefon qo'shildi)
         new_row = [
             0,  # Vaqtinchalik № (sort da yangilanadi)
             full_name,
             date_formatted,
             booking.slot,
             booking.field,
-            PRICES.get(booking.field, 0)
+            PRICES.get(booking.field, 0),
+            user.phone  # Yangi Telefon ustuni
         ]
         ws.append(new_row)
         logging.info(f"✅ Yangi o'yin {booking_id} qo'shildi")
@@ -149,29 +152,30 @@ def delete_booking_from_excel(booking_id):
         logging.error(f"Foydalanuvchi topilmadi!")
         return
 
-    full_name = f"{user.name} {user.surname}"  # Agar teskari bo'lsa, o'zgartiring
+    full_name = f"{user.name} {user.surname}"
 
     wb = load_or_create_excel()
     ws = wb['Sheet1']
 
     date_formatted = booking.date.strftime('%d.%m.%Y')
 
-    # Qidirish va barcha mos qatorlarni o'chirish (agar duplicate bo'lsa) <<<< TO'G'RILASH: while loop
+    # Qidirish va barcha mos qatorlarni o'chirish
     row = 3
     found_count = 0
     while row <= ws.max_row:
         if (ws.cell(row, 3).value == date_formatted and
             ws.cell(row, 4).value == booking.slot and
             ws.cell(row, 5).value == booking.field and
-            ws.cell(row, 2).value == full_name):
+            ws.cell(row, 2).value == full_name and
+            ws.cell(row, 7).value == user.phone):  # Telefonni ham tekshirish
             ws.delete_rows(row)
             found_count += 1
             logging.info(f"O'chirildi: row {row} for booking {booking_id}")
-            continue  # Row o'chganda, keyingi row ni tekshirish
+            continue
         row += 1
 
     if found_count == 0:
-        logging.warning(f"O'yin ID {booking_id} Excel da topilmadi! (Full name: {full_name})")
+        logging.warning(f"O'yin ID {booking_id} Excel da topilmadi! (Full name: {full_name}, Phone: {user.phone})")
     else:
         logging.info(f"✅ {found_count} ta mos qator o'chirildi for booking {booking_id}")
 
@@ -193,23 +197,24 @@ def generate_full_excel():
     ws = wb.active
     ws.title = 'Sheet1'
 
-    # Header
+    # Header (Telefon qo'shildi)
     ws['A1'] = 'Butun tarix'
-    ws.merge_cells('A1:F1')
-    ws.append(['№', 'FISH', 'Sana', 'Vaqt', 'Maydon', 'Pul'])
+    ws.merge_cells('A1:G1')
+    ws.append(['№', 'FISH', 'Sana', 'Vaqt', 'Maydon', 'Pul', 'Telefon'])
 
-    # Ma'lumotlarni qo'shish (vaqtinchalik, keyin tartiblanadi)
+    # Ma'lumotlarni qo'shish
     for b in bookings:
         user = get_user_by_id(b.user_id)
         date_formatted = b.date.strftime('%d.%m.%Y')
-        full_name = f"{user.name} {user.surname}" if user else "N/A"  # <<<< O'zgartirilishi mumkin
+        full_name = f"{user.name} {user.surname}" if user else "N/A"
         new_row = [
             0,  # Vaqtinchalik №
             full_name,
             date_formatted,
             b.slot,
             b.field,
-            PRICES.get(b.field, 0)
+            PRICES.get(b.field, 0),
+            user.phone if user else "N/A"  # Yangi Telefon ustuni
         ]
         ws.append(new_row)
 
