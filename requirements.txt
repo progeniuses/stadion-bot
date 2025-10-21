@@ -6,4 +6,4 @@ matplotlib==3.9.2  # Grafiklar
 pandas==2.2.3  # Statistika uchun (optional, lekin yaxshi)
 logging  # Built-in
 psycopg2-binary==2.9.9  # PostgreSQL uchun (agar o'tkazsangiz)
-psycopg2-binary
+openpyxl
