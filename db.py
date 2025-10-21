@@ -1,27 +1,20 @@
-import os
-import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, BigInteger, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
+from config import DATABASE_URL, PRICES
+import datetime
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set")
-
+# ========== DATABASE SETUP ==========
 engine = create_engine(DATABASE_URL, echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-def init_db():
-    """Initialize database engine and create tables"""
-    Base.metadata.create_all(engine)
-    return engine, SessionLocal
 
 # ========== MODELS ==========
 class User(Base):
     __tablename__ = 'users'
+
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, nullable=False)
     name = Column(String(100), nullable=False)
@@ -29,31 +22,43 @@ class User(Base):
     phone = Column(String(20), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
 
+
 class Booking(Base):
     __tablename__ = 'bookings'
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False)
     date = Column(Date, nullable=False)
     field = Column(String(50), nullable=False)
     slot = Column(String(20), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
+
     __table_args__ = (
         {'sqlite_autoincrement': True},
     )
 
-# Create tables on startup (called from bot.py)
-# Base.metadata.create_all(engine)  # Bu yerda emas, bot.py dan chaqiriladi
+
+# Create tables
+Base.metadata.create_all(engine)
+
 
 # ========== DATABASE FUNCTIONS ==========
+
 def get_session():
     """Get database session"""
     return SessionLocal()
+
 
 def add_user(telegram_id, name, surname, phone):
     """Add new user"""
     session = get_session()
     try:
-        user = User(telegram_id=telegram_id, name=name, surname=surname, phone=phone)
+        user = User(
+            telegram_id=telegram_id,
+            name=name,
+            surname=surname,
+            phone=phone
+        )
         session.add(user)
         session.commit()
         return user
@@ -63,6 +68,7 @@ def add_user(telegram_id, name, surname, phone):
     finally:
         session.close()
 
+
 def get_user(telegram_id):
     """Get user by telegram_id"""
     session = get_session()
@@ -71,6 +77,7 @@ def get_user(telegram_id):
     finally:
         session.close()
 
+
 def get_user_by_id(user_id):
     """Get user by internal user_id (for admin)"""
     session = get_session()
@@ -78,6 +85,7 @@ def get_user_by_id(user_id):
         return session.query(User).filter(User.id == user_id).first()
     finally:
         session.close()
+
 
 def add_booking(user_id, date, field, slot):
     """Add new booking and return ID"""
@@ -88,16 +96,24 @@ def add_booking(user_id, date, field, slot):
             Booking.field == field,
             Booking.slot == slot
         ).first()
-        if exists:
-            return None
 
-        booking = Booking(user_id=user_id, date=date, field=field, slot=slot)
+        if exists:
+            return None  # False o'rniga None, chunki ID
+
+        booking = Booking(
+            user_id=user_id,
+            date=date,
+            field=field,
+            slot=slot
+        )
         session.add(booking)
         session.commit()
-        session.refresh(booking)
+        session.refresh(booking)  # ID ni olish
 
+        # Excel ga qo'shish
         from excel_manager import append_booking_to_excel
         append_booking_to_excel(booking.id)
+
         return booking.id
     except Exception as e:
         session.rollback()
@@ -106,13 +122,17 @@ def add_booking(user_id, date, field, slot):
     finally:
         session.close()
 
+
 def get_user_bookings(user_id):
     """Get all bookings for user"""
     session = get_session()
     try:
-        return session.query(Booking).filter(Booking.user_id == user_id).order_by(Booking.date, Booking.slot).all()
+        return session.query(Booking).filter(
+            Booking.user_id == user_id
+        ).order_by(Booking.date, Booking.slot).all()
     finally:
         session.close()
+
 
 def get_booking_by_id(booking_id):
     """Get booking by ID"""
@@ -122,20 +142,24 @@ def get_booking_by_id(booking_id):
     finally:
         session.close()
 
+
 def delete_booking(booking_id):
     """Delete booking by ID"""
     session = get_session()
     try:
         booking = session.query(Booking).filter(Booking.id == booking_id).first()
         if booking:
+            # Excel dan o'chirish
             from excel_manager import delete_booking_from_excel
             delete_booking_from_excel(booking_id)
+
             session.delete(booking)
             session.commit()
             return True
         return False
     finally:
         session.close()
+
 
 def get_booked_slots(date, field):
     """Get booked slots for specific date and field"""
@@ -145,17 +169,19 @@ def get_booked_slots(date, field):
             Booking.date == date,
             Booking.field == field
         ).all()
-        return [b[0] for b in bookings]
+        return [b[0] for b in bookings]  # Tuzatish: tuple dan olish
     finally:
         session.close()
 
+
 def get_all_bookings():
-    """Get all bookings ordered by date descending"""
     session = get_session()
     try:
-        return session.query(Booking).order_by(Booking.date.desc(), Booking.slot).all()
+        return session.query(Booking).order_by(Booking.date.desc(),
+                                               Booking.slot).all()  # desc qo'shdim, eski bookinglar oldin
     finally:
         session.close()
+
 
 def get_today_stats():
     """Get today's statistics"""
@@ -165,9 +191,12 @@ def get_today_stats():
         return session.query(
             Booking.field,
             func.count(Booking.id)
-        ).filter(Booking.date == today).group_by(Booking.field).all()
+        ).filter(
+            Booking.date == today
+        ).group_by(Booking.field).all()
     finally:
         session.close()
+
 
 def get_month_stats():
     """Get month statistics"""
@@ -181,25 +210,26 @@ def get_month_stats():
     finally:
         session.close()
 
+
+# Yangi funksiyalar: Daromadni haqiqiy hisoblash uchun
 def get_today_revenue():
-    """Get today's revenue based on PRICES from config"""
+    """Bugungi haqiqiy daromadni hisoblash"""
     session = get_session()
     try:
         today = datetime.date.today()
         bookings = session.query(Booking).filter(Booking.date == today).all()
-        from config import PRICES
         revenue = sum(PRICES.get(b.field, 0) for b in bookings)
         return revenue
     finally:
         session.close()
 
+
 def get_month_revenue():
-    """Get month's revenue based on PRICES from config"""
+    """Oylik haqiqiy daromadni hisoblash"""
     session = get_session()
     try:
         month_start = datetime.date.today().replace(day=1)
         bookings = session.query(Booking).filter(Booking.date >= month_start).all()
-        from config import PRICES
         revenue = sum(PRICES.get(b.field, 0) for b in bookings)
         return revenue
     finally:
